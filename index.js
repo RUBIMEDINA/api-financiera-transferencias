@@ -22,30 +22,23 @@ const PORT = process.env.PORT || 5100;
 // ============================================
 async function connectToMongo() {
     try {
-
-        if (mongoose.connection.readyState === 1) {
-            return;
-        }
-
         const mongoURI = process.env.MONGO_URI;
 
-        if (!mongoURI) {
-            throw new Error('MONGO_URI no definida');
-        }
-
-        console.log('🔄 Conectando a MongoDB Atlas...');
+        console.log("==================================");
+        console.log("MONGO_URI existe:", !!mongoURI);
+        console.log("Primeros 40 caracteres:", mongoURI ? mongoURI.substring(0, 40) : "NO EXISTE");
+        console.log("==================================");
 
         await mongoose.connect(mongoURI);
 
-        console.log('✅ Conectado a MongoDB Atlas');
-        console.log(`📊 Base de datos: ${mongoose.connection.db.databaseName}`);
+        console.log("✅ Mongo conectado");
+        console.log(mongoose.connection.db.databaseName);
 
     } catch (error) {
-
-        console.error('❌ Error MongoDB:', error.message);
-
+        console.error("❌ ERROR MONGODB");
+        console.error(error);
     }
-}
+} 
 
 // Conectar inmediatamente
 connectToMongo();
