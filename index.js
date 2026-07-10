@@ -17,6 +17,39 @@ const errorHandler = require('./middleware/errorHandler');
 const app = express();
 const PORT = process.env.PORT || 5100;
 
+// ============================================
+// CONEXIÓN A MONGODB
+// ============================================
+async function connectToMongo() {
+    try {
+
+        if (mongoose.connection.readyState === 1) {
+            return;
+        }
+
+        const mongoURI = process.env.MONGO_URI;
+
+        if (!mongoURI) {
+            throw new Error('MONGO_URI no definida');
+        }
+
+        console.log('🔄 Conectando a MongoDB Atlas...');
+
+        await mongoose.connect(mongoURI);
+
+        console.log('✅ Conectado a MongoDB Atlas');
+        console.log(`📊 Base de datos: ${mongoose.connection.db.databaseName}`);
+
+    } catch (error) {
+
+        console.error('❌ Error MongoDB:', error.message);
+
+    }
+}
+
+// Conectar inmediatamente
+connectToMongo();
+
 // Middlewares
 app.use(helmet());
 app.use(express.json());
@@ -26,80 +59,36 @@ app.use('/api/auth', authRoutes);
 app.use('/api/cuentas', accountRoutes);
 app.use('/api/transacciones', transactionRoutes);
 
-// Ruta de health check
+// Ruta Health
 app.get('/health', (req, res) => {
+
     res.json({
         status: 'OK',
         timestamp: new Date().toISOString(),
         mongo: mongoose.connection.readyState === 1 ? '✅ connected' : '❌ disconnected'
     });
+
 });
 
-// Ruta raíz
+// Ruta principal
 app.get('/', (req, res) => {
     res.send('🏦 API Financiera de Transferencias');
 });
 
-// Middleware de errores (debe ir al final)
+// Middleware de errores
 app.use(errorHandler);
 
-// ============================================
-// CONEXIÓN A MONGODB
-// ============================================
-async function connectToMongo() {
-    try {
-        const mongoURI = process.env.MONGO_URI;
-        
-        if (!mongoURI) {
-            console.error('❌ MONGO_URI no definida en .env');
-            process.exit(1);
-        }
+// Solo iniciar servidor en local/Render
+if (!process.env.VERCEL) {
 
-        console.log('🔄 Conectando a MongoDB Atlas...');
-        
-        await mongoose.connect(mongoURI, {
-            serverSelectionTimeoutMS: 5000,
-            socketTimeoutMS: 45000,
-        });
-        
-        console.log('✅ Conectado a MongoDB Atlas');
-        console.log(`📊 Base de datos: ${mongoose.connection.db.databaseName}`);
-        
-    } catch (error) {
-        console.error('❌ Error de conexión:', error.message);
-        
-        if (error.message.includes('ENOTFOUND')) {
-            console.log('\n💡 Verifica:');
-            console.log('1. Tu conexión a internet');
-            console.log('2. URI de MongoDB correcta en .env');
-            console.log('3. Tu IP en Network Access de Atlas');
-        } else if (error.message.includes('Authentication failed')) {
-            console.log('\n💡 Verifica:');
-            console.log('1. Usuario y contraseña correctos');
-            console.log('2. El usuario existe en MongoDB Atlas');
-        }
-        
-        process.exit(1);
-    }
+    app.listen(PORT, () => {
+
+        console.log(`🏦 API Financiera corriendo en el puerto ${PORT}`);
+        console.log(`📡 http://localhost:${PORT}`);
+
+    });
+
 }
 
-// ============================================
-// INICIAR SERVIDOR
-// ============================================
-app.listen(PORT, async () => {
-    console.log(`\n🏦 API Financiera corriendo en el puerto ${PORT}`);
-    console.log(`📡 http://localhost:${PORT}`);
-    console.log(`🔗 Health Check: http://localhost:${PORT}/health\n`);
-    
-    await connectToMongo();
-    
-    console.log('\n✅ Sistema financiero listo para usar');
-    console.log('📋 Endpoints disponibles:');
-    console.log('   POST   /api/auth/registrar       - Registrar usuario');
-    console.log('   POST   /api/auth/login           - Iniciar sesión');
-    console.log('   GET    /api/auth/perfil          - Obtener perfil');
-    console.log('   POST   /api/cuentas              - Crear cuenta');
-    console.log('   GET    /api/cuentas/mis-cuentas  - Mis cuentas');
-    console.log('   POST   /api/transacciones/transferir - Transferir');
-    console.log('   GET    /api/transacciones/mis-transacciones - Mis transacciones\n');
-}); 
+// Exportar para Vercel
+module.exports = app; 
