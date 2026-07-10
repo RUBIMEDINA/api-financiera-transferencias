@@ -15,33 +15,6 @@ const transactionRoutes = require('./routes/transactionRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
-const PORT = process.env.PORT || 5100;
-
-// ============================================
-// CONEXIÓN A MONGODB
-// ============================================
-async function connectToMongo() {
-    try {
-        const mongoURI = process.env.MONGO_URI;
-
-        console.log("==================================");
-        console.log("MONGO_URI existe:", !!mongoURI);
-        console.log("Primeros 40 caracteres:", mongoURI ? mongoURI.substring(0, 40) : "NO EXISTE");
-        console.log("==================================");
-
-        await mongoose.connect(mongoURI);
-
-        console.log("✅ Mongo conectado");
-        console.log(mongoose.connection.db.databaseName);
-
-    } catch (error) {
-        console.error("❌ ERROR MONGODB");
-        console.error(error);
-    }
-} 
-
-// Conectar inmediatamente
-connectToMongo();
 
 // Middlewares
 app.use(helmet());
@@ -52,36 +25,75 @@ app.use('/api/auth', authRoutes);
 app.use('/api/cuentas', accountRoutes);
 app.use('/api/transacciones', transactionRoutes);
 
-// Ruta Health
+// Ruta de health check
 app.get('/health', (req, res) => {
-
+    const state = mongoose.connection.readyState;
+    const states = ['disconnected', 'connected', 'connecting', 'disconnecting'];
     res.json({
         status: 'OK',
         timestamp: new Date().toISOString(),
-        mongo: mongoose.connection.readyState === 1 ? '✅ connected' : '❌ disconnected'
+        mongo: states[state] || 'unknown',
+        readyState: state
     });
-
 });
 
-// Ruta principal
+// Ruta raíz
 app.get('/', (req, res) => {
     res.send('🏦 API Financiera de Transferencias');
 });
 
-// Middleware de errores
+// Middleware de errores (debe ir al final)
 app.use(errorHandler);
 
-// Solo iniciar servidor en local/Render
-if (!process.env.VERCEL) {
+// ============================================
+// CONEXIÓN A MONGODB (SIN ESPERAR)
+// ============================================
+const mongoURI = process.env.MONGO_URI;
+console.log('==================================');
+console.log('MONGO_URI existe:', !!mongoURI);
+console.log('Primeros 40 caracteres:', mongoURI ? mongoURI.substring(0, 40) : 'NO EXISTE');
+console.log('==================================');
 
-    app.listen(PORT, () => {
-
-        console.log(`🏦 API Financiera corriendo en el puerto ${PORT}`);
-        console.log(`📡 http://localhost:${PORT}`);
-
+if (mongoURI) {
+    mongoose.connect(mongoURI, {
+        serverSelectionTimeoutMS: 5000,
+        socketTimeoutMS: 45000,
+    })
+    .then(() => {
+        console.log('✅ Conectado a MongoDB Atlas');
+        console.log(`📊 Base de datos: ${mongoose.connection.db.databaseName}`);
+    })
+    .catch((error) => {
+        console.error('❌ Error de conexión:', error.message);
     });
-
+} else {
+    console.error('❌ MONGO_URI no definida en .env');
 }
 
-// Exportar para Vercel
+// ============================================
+// INICIAR SERVIDOR (SOLO LOCAL)
+// ============================================
+const PORT = process.env.PORT || 5100;
+
+if (!process.env.VERCEL) {
+    app.listen(PORT, async () => {
+        console.log(`\n🏦 API Financiera corriendo en el puerto ${PORT}`);
+        console.log(`📡 http://localhost:${PORT}`);
+        console.log(`🔗 Health Check: http://localhost:${PORT}/health\n`);
+        
+        console.log('\n✅ Sistema financiero listo para usar');
+        console.log('📋 Endpoints disponibles:');
+        console.log('   POST   /api/auth/registrar       - Registrar usuario');
+        console.log('   POST   /api/auth/login           - Iniciar sesión');
+        console.log('   GET    /api/auth/perfil          - Obtener perfil');
+        console.log('   POST   /api/cuentas              - Crear cuenta');
+        console.log('   GET    /api/cuentas/mis-cuentas  - Mis cuentas');
+        console.log('   POST   /api/transacciones/transferir - Transferir');
+        console.log('   GET    /api/transacciones/mis-transacciones - Mis transacciones\n');
+    });
+}
+
+// ============================================
+// EXPORTAR PARA VERCEL
+// ============================================
 module.exports = app; 
