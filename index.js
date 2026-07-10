@@ -25,7 +25,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/cuentas', accountRoutes);
 app.use('/api/transacciones', transactionRoutes);
 
-// Ruta de health check
+// Ruta de health check con más información
 app.get('/health', (req, res) => {
     const state = mongoose.connection.readyState;
     const states = ['disconnected', 'connected', 'connecting', 'disconnecting'];
@@ -33,7 +33,9 @@ app.get('/health', (req, res) => {
         status: 'OK',
         timestamp: new Date().toISOString(),
         mongo: states[state] || 'unknown',
-        readyState: state
+        readyState: state,
+        host: mongoose.connection.host || 'no host',
+        database: mongoose.connection.db ? mongoose.connection.db.databaseName : 'no database'
     });
 });
 
@@ -46,7 +48,7 @@ app.get('/', (req, res) => {
 app.use(errorHandler);
 
 // ============================================
-// CONEXIÓN A MONGODB (SIN ESPERAR)
+// CONEXIÓN A MONGODB CON LOGS DETALLADOS
 // ============================================
 const mongoURI = process.env.MONGO_URI;
 console.log('==================================');
@@ -55,17 +57,40 @@ console.log('Primeros 40 caracteres:', mongoURI ? mongoURI.substring(0, 40) : 'N
 console.log('==================================');
 
 if (mongoURI) {
+    console.log('🔄 Intentando conectar a MongoDB...');
+    
     mongoose.connect(mongoURI, {
-        serverSelectionTimeoutMS: 5000,
+        serverSelectionTimeoutMS: 10000,
         socketTimeoutMS: 45000,
     })
     .then(() => {
         console.log('✅ Conectado a MongoDB Atlas');
         console.log(`📊 Base de datos: ${mongoose.connection.db.databaseName}`);
+        console.log(`🔗 Host: ${mongoose.connection.host}`);
     })
     .catch((error) => {
-        console.error('❌ Error de conexión:', error.message);
+        console.error('❌ Error de conexión DETALLADO:');
+        console.error('   Mensaje:', error.message);
+        console.error('   Código:', error.code);
+        console.error('   Nombre:', error.name);
+        if (error.reason) {
+            console.error('   Razón:', error.reason);
+        }
     });
+    
+    // Eventos de conexión adicionales
+    mongoose.connection.on('error', (err) => {
+        console.error('❌ Error en conexión de MongoDB:', err.message);
+    });
+    
+    mongoose.connection.on('disconnected', () => {
+        console.log('⚠️ MongoDB desconectado');
+    });
+    
+    mongoose.connection.on('connected', () => {
+        console.log('✅ MongoDB conectado (evento)');
+    });
+    
 } else {
     console.error('❌ MONGO_URI no definida en .env');
 }
