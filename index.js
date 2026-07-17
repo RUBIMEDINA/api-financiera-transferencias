@@ -3,29 +3,61 @@ const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const helmet = require('helmet');
 
-// Cargar variables de entorno
 dotenv.config();
 
-// Importar rutas
 const authRoutes = require('./routes/authRoutes');
 const accountRoutes = require('./routes/accountRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
 
-// Importar middleware de errores
 const errorHandler = require('./middleware/errorHandler');
+const validarAppToken = require('./middleware/appTokenValidator');
+const { generarAppToken } = require('./utils/appToken');
 
 const app = express();
 
-// Middlewares
+// ============================================
+// RUTAS PÚBLICAS (NO REQUIEREN APP-TOKEN)
+// ============================================
+const RUTAS_PUBLICAS = ['/health', '/api/app-token'];
+
+// ============================================
+// MIDDLEWARE DE APP-TOKEN
+// ============================================
+app.use((req, res, next) => {
+    if (RUTAS_PUBLICAS.includes(req.path)) {
+        return next();
+    }
+    validarAppToken(req, res, next);
+});
+
+// Middlewares generales
 app.use(helmet());
 app.use(express.json());
 
-// Rutas
+// ============================================
+// RUTA PÚBLICA: OBTENER APP-TOKEN
+// ============================================
+app.get('/api/app-token', (req, res) => {
+    res.json({
+        success: true,
+        message: 'Token de aplicación generado',
+        data: {
+            token: generarAppToken(),
+            usage: 'Usa este token en el header "app-token" para todas las peticiones'
+        }
+    });
+});
+
+// ============================================
+// RUTAS PROTEGIDAS (REQUIEREN APP-TOKEN)
+// ============================================
 app.use('/api/auth', authRoutes);
 app.use('/api/cuentas', accountRoutes);
 app.use('/api/transacciones', transactionRoutes);
 
-// Ruta de health check con más información
+// ============================================
+// HEALTH CHECK (PÚBLICO)
+// ============================================
 app.get('/health', (req, res) => {
     const state = mongoose.connection.readyState;
     const states = ['disconnected', 'connected', 'connecting', 'disconnecting'];
@@ -39,16 +71,14 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Ruta raíz
 app.get('/', (req, res) => {
     res.send('🏦 API Financiera de Transferencias');
 });
 
-// Middleware de errores (debe ir al final)
 app.use(errorHandler);
 
 // ============================================
-// CONEXIÓN A MONGODB CON LOGS DETALLADOS
+// CONEXIÓN A MONGODB
 // ============================================
 const mongoURI = process.env.MONGO_URI;
 console.log('==================================');
@@ -69,26 +99,19 @@ if (mongoURI) {
         console.log(`🔗 Host: ${mongoose.connection.host}`);
     })
     .catch((error) => {
-        console.error('❌ Error de conexión DETALLADO:');
-        console.error('   Mensaje:', error.message);
-        console.error('   Código:', error.code);
-        console.error('   Nombre:', error.name);
-        if (error.reason) {
-            console.error('   Razón:', error.reason);
-        }
+        console.error('❌ Error de conexión:', error.message);
     });
     
-    // Eventos de conexión adicionales
     mongoose.connection.on('error', (err) => {
         console.error('❌ Error en conexión de MongoDB:', err.message);
     });
     
-    mongoose.connection.on('disconnected', () => {
-        console.log('⚠️ MongoDB desconectado');
-    });
-    
     mongoose.connection.on('connected', () => {
         console.log('✅ MongoDB conectado (evento)');
+    });
+    
+    mongoose.connection.on('disconnected', () => {
+        console.log('⚠️ MongoDB desconectado');
     });
     
 } else {
@@ -108,17 +131,18 @@ if (!process.env.VERCEL) {
         
         console.log('\n✅ Sistema financiero listo para usar');
         console.log('📋 Endpoints disponibles:');
-        console.log('   POST   /api/auth/registrar       - Registrar usuario');
-        console.log('   POST   /api/auth/login           - Iniciar sesión');
-        console.log('   GET    /api/auth/perfil          - Obtener perfil');
-        console.log('   POST   /api/cuentas              - Crear cuenta');
-        console.log('   GET    /api/cuentas/mis-cuentas  - Mis cuentas');
+        console.log('   📌 RUTAS PÚBLICAS (sin app-token):');
+        console.log('   GET    /health                  - Health Check');
+        console.log('   GET    /api/app-token           - Obtener token de aplicación');
+        console.log('   📌 RUTAS PROTEGIDAS (requieren app-token):');
+        console.log('   POST   /api/auth/registrar      - Registrar usuario');
+        console.log('   POST   /api/auth/login          - Iniciar sesión');
+        console.log('   GET    /api/auth/perfil         - Obtener perfil');
+        console.log('   POST   /api/cuentas             - Crear cuenta');
+        console.log('   GET    /api/cuentas/mis-cuentas - Mis cuentas');
         console.log('   POST   /api/transacciones/transferir - Transferir');
         console.log('   GET    /api/transacciones/mis-transacciones - Mis transacciones\n');
     });
 }
 
-// ============================================
-// EXPORTAR PARA VERCEL
-// ============================================
 module.exports = app; 
